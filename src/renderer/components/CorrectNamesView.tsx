@@ -26,7 +26,7 @@ import SearchIcon from '@material-ui/icons/Search'
 import CancelIcon from '@material-ui/icons/Cancel'
 import Trie from '../../Trie'
 import { WithStyles, createStyles } from '@material-ui/styles'
-import { ProjectState } from '../reducers/project'
+import { ProjectState } from '../redu/project'
 import { Link } from 'react-router-dom'
 import { Map as iMap } from 'immutable'
 import { sortBy } from 'lodash'
@@ -49,7 +49,7 @@ const styles = (theme: Theme) =>
       flexWrap: 'nowrap'
     },
     tableHolder: {
-      flex: '0 0 60%'
+      flex: '1 0 60%'
     },
     trips: {
       flex: '0 0 40%',
@@ -348,14 +348,16 @@ const CorrectNamesView = ({ project, classes }: Props) => {
             )}
           </AutoSizer>
         </div>
-        <div className={classes.trips}>
-          <Typography variant="h5">Trips</Typography>
-          <div className={classes.tripsScroller}>
-            {printedTrips.map((trip, index) => (
-              <pre key={index}>{trip}</pre>
-            ))}
+        {selectedName != null && (
+          <div className={classes.trips}>
+            <Typography variant="h5">Trips</Typography>
+            <div className={classes.tripsScroller}>
+              {printedTrips.map((trip, index) => (
+                <pre key={index}>{trip}</pre>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   )

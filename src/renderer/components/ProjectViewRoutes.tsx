@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ProjectState } from '../reducers/project'
+import { ProjectState } from '../redux/project'
 import { Route, Switch } from 'react-router-dom'
 import CorrectNamesView from './CorrectNamesView'
 import ProjectViewLinks from './ProjectViewLinks'

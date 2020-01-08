@@ -7,10 +7,8 @@ import Tooltip from '@material-ui/core/Tooltip'
 import InputIcon from '@material-ui/icons/Input'
 import { remote } from 'electron'
 const { dialog } = remote
-import { parseCompassMakAndDatFiles } from '@speleotica/compass/node'
-import { setProject } from '../actions/projectActions'
 import { useDispatch, useSelector } from 'react-redux'
-import { RootState } from '../reducers'
+import { RootState } from '../redux'
 import 'react-virtualized/styles.css'
 import {
   Dialog,
@@ -24,25 +22,11 @@ import {
   withStyles,
   Container
 } from '@material-ui/core'
-import { throttle } from 'lodash'
 import path from 'path'
 import { WithStyles, createStyles } from '@material-ui/styles'
 import ProjectViewRoutes from './ProjectViewRoutes'
 import BigActionButton from './BigActionButton'
-
-type Progress = {
-  message?: string
-  completed?: number
-  total?: number
-}
-
-type Stash = {
-  progress: Progress
-  task: {
-    onProgress: (progress: Progress) => any
-    canceled: boolean
-  }
-}
+import { openFile, cancelOpenFile, Progress } from '../redux/loading'
 
 const styles = (theme: Theme) =>
   createStyles({
@@ -92,20 +76,6 @@ interface Props extends WithStyles<typeof styles> {}
 
 const Application = ({ classes }: Props) => {
   const dispatch = useDispatch()
-  const [parsing, setParsing] = React.useState(false)
-  const [parseError, setParseError] = React.useState<Error | null>(null)
-  const [progress, setProgress] = React.useState<Progress>({})
-  const throttledSetProgress = React.useMemo(() => throttle(setProgress, 30), [setProgress])
-  const { current: stash } = React.useRef<Stash>({
-    progress: {},
-    task: {
-      onProgress: progress => {
-        throttledSetProgress((stash.progress = { ...stash.progress, ...progress }))
-      },
-      canceled: false
-    }
-  })
-
   const handleOpenClick = React.useCallback(async () => {
     const filePaths = await dialog.showOpenDialog({
       title: 'Select Compass Project',
@@ -113,28 +83,19 @@ const Application = ({ classes }: Props) => {
     })
     if (!filePaths) return
     const [file] = filePaths
-    stash.task.canceled = false
-    stash.progress = {}
-    setProgress({})
-    setParseError(null)
-    setParsing(true)
-    try {
-      const data = await parseCompassMakAndDatFiles(file, stash.task)
-      console.log(data)
-      dispatch(setProject({ file, data }))
-    } catch (error) {
-      if (error.message !== 'canceled') {
-        console.error(error.stack)
-        setParseError(error)
-      }
-    } finally {
-      setParsing(false)
-    }
-  }, [dispatch, setParsing, setParseError, setProgress])
+    dispatch(openFile(file))
+  }, [dispatch])
 
+  const loading = useSelector((state: RootState) => state.loading)
   const project = useSelector((state: RootState) => state.project)
 
-  const { message, completed, total } = progress
+  const { message, completed, total } = loading ? loading.progress : ({} as Progress)
+  console.log({ completed, total })
+  const parseError = loading ? loading.error : null
+  const [showErrorDialog, setShowErrorDialog] = React.useState(parseError != null)
+  React.useEffect(() => {
+    setShowErrorDialog(parseError != null)
+  }, [parseError, setShowErrorDialog])
 
   return (
     <div className={classes.root}>
@@ -168,27 +129,29 @@ const Application = ({ classes }: Props) => {
           </Container>
         )}
       </div>
-      <Dialog open={parseError != null} aria-labelled-by="parse-error-dialog-title">
+      <Dialog open={showErrorDialog} aria-labelled-by="parse-error-dialog-title">
         <DialogTitle id="parse-error-dialog-title">Failed to Open Project</DialogTitle>
         <DialogContent>
           <Typography variant="body1">{parseError && parseError.message}</Typography>
         </DialogContent>
         <DialogActions>
-          <Button variant="text" color="primary" onClick={() => setParseError(null)}>
+          <Button variant="text" color="primary" onClick={() => setShowErrorDialog(false)}>
             OK
           </Button>
         </DialogActions>
       </Dialog>
-      <Dialog open={parsing} aria-labelled-by="progress-dialog-title">
+      <Dialog open={loading != null} aria-labelled-by="progress-dialog-title">
         <DialogTitle id="progress-dialog-title">Opening Project</DialogTitle>
         <DialogContent>
           <Typography variant="body1">{message}</Typography>
           <LinearProgress
             variant="determinate"
-            value={parsing && completed != null && total != null ? (completed * 100) / total : 0}
+            value={
+              loading != null && completed != null && total != null ? (completed / total) * 100 : 0
+            }
           />
           <DialogActions>
-            <Button variant="text" color="primary" onClick={() => (stash.task.canceled = true)}>
+            <Button variant="text" color="primary" onClick={() => dispatch(cancelOpenFile())}>
               Cancel
             </Button>
           </DialogActions>
