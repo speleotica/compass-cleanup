@@ -93,7 +93,7 @@ export default function buildNameCorrectionStats(data: CompassMakFile): NameCorr
       stats.isSuspect = true
       stats.suggested = best
     } else {
-      stats.isSuspect = normalized.split(/\s+/g).length > 2
+      stats.isSuspect = normalized.split(/\s+/g).length !== 2
     }
   }
 
