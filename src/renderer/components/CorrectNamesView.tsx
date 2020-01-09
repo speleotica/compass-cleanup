@@ -26,7 +26,7 @@ import SearchIcon from '@material-ui/icons/Search'
 import CancelIcon from '@material-ui/icons/Cancel'
 import Trie from '../../Trie'
 import { WithStyles, createStyles } from '@material-ui/styles'
-import { ProjectState } from '../redu/project'
+import { ProjectState } from '../redux/project'
 import { Link } from 'react-router-dom'
 import { Map as iMap } from 'immutable'
 import { sortBy } from 'lodash'
@@ -247,7 +247,9 @@ const CorrectNamesView = ({ project, classes }: Props) => {
     const stats = nameCorrectionStats.get(selectedName)
     if (!stats) return []
     try {
-      return stats.trips.map(trip => formatCompassTripHeader(trip.header))
+      return stats.trips.map(trip =>
+        formatCompassTripHeader(trip.header, { includeColumnHeaders: false })
+      )
     } catch (error) {
       console.error(error.stack)
       return []

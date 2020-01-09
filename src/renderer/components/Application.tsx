@@ -90,7 +90,6 @@ const Application = ({ classes }: Props) => {
   const project = useSelector((state: RootState) => state.project)
 
   const { message, completed, total } = loading ? loading.progress : ({} as Progress)
-  console.log({ completed, total })
   const parseError = loading ? loading.error : null
   const [showErrorDialog, setShowErrorDialog] = React.useState(parseError != null)
   React.useEffect(() => {
