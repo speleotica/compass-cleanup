@@ -1,11 +1,11 @@
 export default class Trie<Data = undefined> {
-  size: number
-  word?: string
-  children: Map<string, Trie<Data>> = new Map()
-  data?: Data
+    size: number
+    word?: string
+    children: Map<string, Trie<Data>> = new Map()
+    data?: Data
 
-  constructor() {
-    this.size = 0
+    constructor() {
+      this.size = 0
   }
   /**
    * Inserts a word into the Trie.
@@ -14,19 +14,19 @@ export default class Trie<Data = undefined> {
    *
    * @returns{Trie} the inserted (or existing) node corresponding to the word
    */
-  insert(word: string): Trie<Data> {
-    let node: Trie<Data> = this
-    for (var i = 0; i < word.length; i++) {
-      const letter = word.charAt(i)
-      let child = node.children.get(letter)
-      if (!child) node.children.set(letter, (child = new Trie()))
-      node = child
+    insert(word: string): Trie<Data> {
+      let node: Trie<Data> = this
+      for (let i = 0; i < word.length; i++) {
+        const letter = word.charAt(i)
+        let child = node.children.get(letter)
+        if (!child) node.children.set(letter, (child = new Trie()))
+        node = child
     }
-    if (node.word !== word) {
-      node.word = word
-      this.size++
+      if (node.word !== word) {
+        node.word = word
+        this.size++
     }
-    return node
+      return node
   }
 
   /**
@@ -38,32 +38,32 @@ export default class Trie<Data = undefined> {
    * @param{object}   results - object to put the results into (key is word, value is {node, dist})
    * @param{number}   maxDist - will bail on tree paths whose Levenshtein distance is greater than maxDist
    */
-  private searchRecursive(
+    private searchRecursive(
     letter: string,
     word: string,
     previousRow: number[],
     results: Record<string, { node: Trie<Data>; dist: number }>,
     maxDist: number
   ) {
-    const lastColumn = word.length
-    let currentRow = [previousRow[0] + 1]
+      const lastColumn = word.length
+      const currentRow = [previousRow[0] + 1]
 
-    for (var column = 1; column <= lastColumn; column++) {
-      const insertDist = currentRow[column - 1] + 1
-      const deleteDist = previousRow[column] + 1
-      const replaceDist =
+      for (let column = 1; column <= lastColumn; column++) {
+        const insertDist = currentRow[column - 1] + 1
+        const deleteDist = previousRow[column] + 1
+        const replaceDist =
         word.charAt(column - 1) === letter ? previousRow[column - 1] : previousRow[column - 1] + 1
 
-      currentRow[column] = Math.min(insertDist, deleteDist, replaceDist)
+        currentRow[column] = Math.min(insertDist, deleteDist, replaceDist)
     }
 
-    if (currentRow[lastColumn] <= maxDist && this.word) {
-      results[this.word] = { node: this, dist: currentRow[lastColumn] }
+      if (currentRow[lastColumn] <= maxDist && this.word) {
+        results[this.word] = { node: this, dist: currentRow[lastColumn] }
     }
 
-    if (Math.min.apply(undefined, currentRow) <= maxDist) {
-      for (const [letter, child] of this.children.entries()) {
-        child.searchRecursive(letter, word, currentRow, results, maxDist)
+      if (Math.min.apply(undefined, currentRow) <= maxDist) {
+        for (const [letter, child] of this.children.entries()) {
+          child.searchRecursive(letter, word, currentRow, results, maxDist)
       }
     }
   }
@@ -76,18 +76,18 @@ export default class Trie<Data = undefined> {
    *
    * @returns{object} where key is a word from the Trie, and value is {node, dist}.
    */
-  search(word: string, maxDist: number): Record<string, { node: Trie<Data>; dist: number }> {
-    const currentRow = []
-    for (let i = 0; i <= word.length; i++) {
-      currentRow[i] = i
+    search(word: string, maxDist: number): Record<string, { node: Trie<Data>; dist: number }> {
+      const currentRow = []
+      for (let i = 0; i <= word.length; i++) {
+        currentRow[i] = i
     }
 
-    const results = {}
+      const results = {}
 
-    for (const [letter, child] of this.children.entries()) {
-      child.searchRecursive(letter, word, currentRow, results, maxDist)
+      for (const [letter, child] of this.children.entries()) {
+        child.searchRecursive(letter, word, currentRow, results, maxDist)
     }
 
-    return results
+      return results
   }
 }

@@ -3,13 +3,10 @@ import * as React from 'react'
 import AppBar from '@material-ui/core/AppBar'
 import Toolbar from '@material-ui/core/Toolbar'
 import IconButton from '@material-ui/core/IconButton'
-import Tooltip from '@material-ui/core/Tooltip'
-import InputIcon from '@material-ui/icons/Input'
+import MenuIcon from '@material-ui/icons/Menu'
 import { remote } from 'electron'
 const { dialog } = remote
 import { useDispatch, useSelector } from 'react-redux'
-import { RootState } from '../redux'
-import 'react-virtualized/styles.css'
 import {
   Dialog,
   DialogTitle,
@@ -20,13 +17,21 @@ import {
   Button,
   Theme,
   withStyles,
-  Container
+  Container,
+  Menu,
+  MenuItem
 } from '@material-ui/core'
-import path from 'path'
+import * as path from 'path'
 import { WithStyles, createStyles } from '@material-ui/styles'
 import ProjectViewRoutes from './ProjectViewRoutes'
 import BigActionButton from './BigActionButton'
-import { openFile, cancelOpenFile, Progress } from '../redux/loading'
+import { usePopupState, bindTrigger, bindMenu } from 'material-ui-popup-state/hooks'
+import { Progress, Task } from '../../Task'
+import { WithProgressContext } from './WithProgressContext'
+import { throttle } from 'lodash'
+import { setProject } from '../redux/project'
+import { parseCompassMakAndDatFiles } from '@speleotica/compass/node'
+import { RootState } from '../redux'
 
 const styles = (theme: Theme) =>
   createStyles({
@@ -69,6 +74,10 @@ const styles = (theme: Theme) =>
     },
     tableRowOdd: {
       backgroundColor: theme.palette.grey[100]
+    },
+    initActions: {
+      display: 'flex',
+      justifyContent: 'center'
     }
   })
 
@@ -76,87 +85,130 @@ interface Props extends WithStyles<typeof styles> {}
 
 const Application = ({ classes }: Props) => {
   const dispatch = useDispatch()
+  const project = useSelector((state: RootState) => state.project)
+  const menuPopupState = usePopupState({
+    variant: 'popover',
+    popupId: 'menu'
+  })
+
+  const [task, setTask] = React.useState<Task | null>(null)
+  const [taskError, setTaskError] = React.useState<Error | null>(null)
+  const [taskProgress, setTaskProgress] = React.useReducer(
+    (state: Progress, action: Progress | 'reset') =>
+      action === 'reset' ? {} : { ...state, ...action },
+    {}
+  )
+  const withProgress = React.useCallback(
+    async function withProgress<R>(perform: (task: Task) => Promise<R>): Promise<R> {
+      const progress = {}
+      const throttledSetProgress = throttle(setTaskProgress, 250)
+      const task = {
+        onProgress: (newProgress: Progress) => {
+          Object.assign(progress, newProgress)
+          throttledSetProgress(progress)
+        },
+        canceled: false
+      }
+      setTaskError(null)
+      setTaskProgress('reset')
+      setTask(task)
+      try {
+        return await perform(task)
+      } catch (error) {
+        if (error.message !== 'canceled') setTaskError(error)
+        throw error
+      } finally {
+        throttledSetProgress.cancel()
+        setTaskProgress('reset')
+        setTask(null)
+      }
+    },
+    [setTask, setTaskError, setTaskProgress]
+  )
+  const handleCloseErrorDialog = React.useCallback(() => {
+    setTaskError(null)
+  }, [setTaskError])
+  const handleCancelTask = React.useCallback(() => {
+    if (task) task.canceled = true
+  }, [task])
   const handleOpenClick = React.useCallback(async () => {
+    menuPopupState.close()
     const filePaths = await dialog.showOpenDialog({
       title: 'Select Compass Project',
       filters: [{ name: 'Compass Project File (*.mak)', extensions: ['mak'] }]
     })
     if (!filePaths) return
     const [file] = filePaths
-    dispatch(openFile(file))
-  }, [dispatch])
-
-  const loading = useSelector((state: RootState) => state.loading)
-  const project = useSelector((state: RootState) => state.project)
-
-  const { message, completed, total } = loading ? loading.progress : ({} as Progress)
-  const parseError = loading ? loading.error : null
-  const [showErrorDialog, setShowErrorDialog] = React.useState(parseError != null)
-  React.useEffect(() => {
-    setShowErrorDialog(parseError != null)
-  }, [parseError, setShowErrorDialog])
+    const data = await withProgress((task: Task) => parseCompassMakAndDatFiles(file, task))
+    dispatch(setProject({ file, data }))
+  }, [dispatch, menuPopupState, withProgress])
 
   return (
-    <div className={classes.root}>
-      <AppBar position="static" color="primary" className={classes.appBar}>
-        <Toolbar>
-          <Tooltip title="Open Project">
+    <WithProgressContext.Provider value={withProgress}>
+      <div className={classes.root}>
+        <AppBar position="static" color="primary" className={classes.appBar}>
+          <Toolbar>
             <IconButton
               edge="start"
               color="inherit"
               className={classes.openButton}
-              onClick={handleOpenClick}
+              {...bindTrigger(menuPopupState)}
             >
-              <InputIcon />
+              <MenuIcon />
             </IconButton>
-          </Tooltip>
-          <Typography variant="h6" className={classes.title}>
-            {project ? path.basename(project.file) : undefined}
-          </Typography>
-        </Toolbar>
-      </AppBar>
-      <div className={classes.content}>
-        {project ? (
-          <ProjectViewRoutes project={project} />
-        ) : (
-          <Container maxWidth="sm">
-            <BigActionButton
-              icon={<InputIcon />}
-              title="Open a Project to Begin"
-              onClick={handleOpenClick}
+            <Menu
+              {...bindMenu(menuPopupState)}
+              getContentAnchorEl={null}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+            >
+              <MenuItem onClick={handleOpenClick}>Open Compass Project...</MenuItem>
+            </Menu>
+            <Typography variant="h6" className={classes.title}>
+              {project ? path.basename(project.file) : undefined}
+            </Typography>
+          </Toolbar>
+        </AppBar>
+        <div className={classes.content}>
+          {project ? (
+            <ProjectViewRoutes project={project} />
+          ) : (
+            <Container maxWidth="sm" className={classes.initActions}>
+              <BigActionButton title="Open a Compass Project to Begin" onClick={handleOpenClick} />
+            </Container>
+          )}
+        </div>
+        <Dialog open={taskError != null} aria-labelled-by="error-dialog-title">
+          <DialogTitle id="error-dialog-title">Error</DialogTitle>
+          <DialogContent>
+            <Typography variant="body1">{taskError && taskError.message}</Typography>
+            <DialogActions>
+              <Button variant="text" color="primary" onClick={handleCloseErrorDialog}>
+                OK
+              </Button>
+            </DialogActions>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={task != null} aria-labelled-by="progress-dialog-title">
+          <DialogContent>
+            <Typography variant="body1">{taskProgress.message}</Typography>
+            <LinearProgress
+              variant="determinate"
+              value={
+                taskProgress.completed != null && taskProgress.total != null
+                  ? (taskProgress.completed / taskProgress.total) * 100
+                  : 0
+              }
             />
-          </Container>
-        )}
+            <DialogActions>
+              <Button variant="text" color="primary" onClick={handleCancelTask}>
+                Cancel
+              </Button>
+            </DialogActions>
+          </DialogContent>
+        </Dialog>
       </div>
-      <Dialog open={showErrorDialog} aria-labelled-by="parse-error-dialog-title">
-        <DialogTitle id="parse-error-dialog-title">Failed to Open Project</DialogTitle>
-        <DialogContent>
-          <Typography variant="body1">{parseError && parseError.message}</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button variant="text" color="primary" onClick={() => setShowErrorDialog(false)}>
-            OK
-          </Button>
-        </DialogActions>
-      </Dialog>
-      <Dialog open={loading != null} aria-labelled-by="progress-dialog-title">
-        <DialogTitle id="progress-dialog-title">Opening Project</DialogTitle>
-        <DialogContent>
-          <Typography variant="body1">{message}</Typography>
-          <LinearProgress
-            variant="determinate"
-            value={
-              loading != null && completed != null && total != null ? (completed / total) * 100 : 0
-            }
-          />
-          <DialogActions>
-            <Button variant="text" color="primary" onClick={() => dispatch(cancelOpenFile())}>
-              Cancel
-            </Button>
-          </DialogActions>
-        </DialogContent>
-      </Dialog>
-    </div>
+    </WithProgressContext.Provider>
   )
 }
 export default hot(withStyles(styles)(Application))

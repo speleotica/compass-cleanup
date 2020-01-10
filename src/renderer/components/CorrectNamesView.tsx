@@ -27,10 +27,16 @@ import CancelIcon from '@material-ui/icons/Cancel'
 import Trie from '../../Trie'
 import { WithStyles, createStyles } from '@material-ui/styles'
 import { ProjectState } from '../redux/project'
-import { Link } from 'react-router-dom'
 import { Map as iMap } from 'immutable'
 import { sortBy } from 'lodash'
 import { formatCompassTripHeader } from '@speleotica/compass/dat'
+import _useViewState from '../redux/useViewState'
+import { useWithProgress } from './WithProgressContext'
+import replaceNamesForMakFile from '../../replaceNamesForMakFile'
+import { useSelector } from 'react-redux'
+import { RootState } from '../redux'
+
+const useViewState = _useViewState('CorrectNames')
 
 const styles = (theme: Theme) =>
   createStyles({
@@ -58,6 +64,11 @@ const styles = (theme: Theme) =>
       alignItems: 'stretch',
       marginLeft: theme.spacing(1),
       overflow: 'hidden'
+    },
+    tripsTitle: {
+      flex: '0 0 auto',
+      display: 'flex',
+      alignItems: 'center'
     },
     tripsScroller: {
       flex: '1 1 auto',
@@ -118,34 +129,52 @@ interface Props extends WithStyles<typeof styles> {
   project: ProjectState
 }
 
+const rowHeight = 40
+
 const CorrectNamesView = ({ project, classes }: Props) => {
-  const [search, setSearch] = React.useState('')
+  const [search, setSearch] = useViewState<string>('search', '')
   const searchRef = React.useRef<HTMLInputElement | null>(null)
   const handleClearSearch = React.useCallback(() => {
     setSearch('')
     const searchField = searchRef.current
     if (searchField) searchField.focus()
   }, [setSearch])
-  const [hideUnsuspicious, setHideUnsuspicious] = React.useState(false)
-  const [allScrollTop, setAllScrollTop] = React.useState(0)
-  const [selectedName, setSelectedName] = React.useState<string | null>(null)
-  const handleAllScroll = React.useCallback(({ scrollTop }) => setAllScrollTop(scrollTop), [
-    setAllScrollTop
-  ])
+  const [hideUnsuspicious, setHideUnsuspicious] = useViewState<boolean>('hideUnsuspicious', false)
+  const [allScrollTop, setAllScrollTop] = useViewState<number>('allScrollTop', 0)
+  const [onlySuspiciousScrollTop, setOnlySuspiciousScrollTop] = useViewState<number>(
+    'onlySuspiciousScrollTop',
+    0
+  )
+  const [selectedName, setSelectedName] = useViewState<string | null>('selectedName', null)
+  const scrollTop = search ? undefined : hideUnsuspicious ? onlySuspiciousScrollTop : allScrollTop
+  const handleScroll = React.useCallback(
+    ({ scrollTop }) => {
+      if (search) return
+      if (hideUnsuspicious) setOnlySuspiciousScrollTop(scrollTop)
+      else setAllScrollTop(scrollTop)
+    },
+    [setAllScrollTop, setOnlySuspiciousScrollTop, hideUnsuspicious, search]
+  )
   const handleSearchChange = React.useCallback(event => setSearch(event.target.value), [setSearch])
 
   const nameCorrectionStats = React.useMemo<NameCorrectionStats>(() => {
     if (!project) return new Map()
     return buildNameCorrectionStats(project.data)
   }, [project])
-  const [replacements, setReplacements] = React.useReducer(
-    (state: iMap<string, string>, action: Record<string, string>) => state.merge(action),
+  const [replacements, _setReplacements] = useViewState<iMap<string, string>>('replacements', () =>
     iMap<string, string>(
       Array.from(nameCorrectionStats.values()).map(({ original, suggested }) => [
         original,
         suggested || ''
       ])
     )
+  )
+  const replacementsRef = React.useRef<iMap<string, string>>(replacements)
+  replacementsRef.current = replacements
+  const setReplacements = React.useCallback(
+    (newReplacements: Record<string, string>) =>
+      _setReplacements(replacementsRef.current.merge(newReplacements)),
+    [_setReplacements]
   )
 
   const allRows = React.useMemo<NameCorrectionStat[]>(
@@ -215,11 +244,30 @@ const CorrectNamesView = ({ project, classes }: Props) => {
       return (
         <TextField
           inputProps={{ className: classes.replacementInput }}
-          InputProps={{ disableUnderline: true }}
+          InputProps={{
+            disableUnderline: true,
+            endAdornment: value ? (
+              <InputAdornment position="end">
+                <IconButton
+                  onClick={event => {
+                    event.stopPropagation()
+                    setReplacements({ [cellData]: '' })
+                  }}
+                >
+                  <CancelIcon />
+                </IconButton>
+              </InputAdornment>
+            ) : (
+              undefined
+            )
+          }}
           type="text"
           value={value}
+          onClick={event => {
+            event.stopPropagation()
+          }}
           onChange={event => setReplacements({ [cellData]: event.target.value })}
-          fullWidth
+          fullWidth={true}
         />
       )
     },
@@ -256,6 +304,15 @@ const CorrectNamesView = ({ project, classes }: Props) => {
     }
   }, [selectedName, nameCorrectionStats])
 
+  const withProgress = useWithProgress()
+
+  const makFile = useSelector((state: RootState) => state.project && state.project.file)
+
+  const handleApply = React.useCallback(() => {
+    if (!makFile) return
+    withProgress(task => replaceNamesForMakFile(makFile, replacements, task))
+  }, [withProgress, replacements])
+
   return (
     <div className={classes.root}>
       <div className={classes.controls}>
@@ -290,10 +347,7 @@ const CorrectNamesView = ({ project, classes }: Props) => {
         </div>
         <div className={classes.spacer} />
         <div className={classes.buttons}>
-          <Button variant="text" component={Link} to="/">
-            Cancel
-          </Button>
-          <Button variant="outlined" color="primary">
+          <Button variant="outlined" color="primary" onClick={handleApply}>
             Apply
           </Button>
         </div>
@@ -306,13 +360,13 @@ const CorrectNamesView = ({ project, classes }: Props) => {
                 tabIndex={-1}
                 width={width}
                 height={height}
-                headerHeight={40}
+                headerHeight={rowHeight}
                 rowCount={filteredRows.length}
                 rowGetter={rowGetter}
                 rowRenderer={rowRenderer}
-                rowHeight={40}
-                scrollTop={!search ? allScrollTop : undefined}
-                onScroll={!search ? handleAllScroll : undefined}
+                rowHeight={rowHeight}
+                scrollTop={scrollTop}
+                onScroll={handleScroll}
                 onRowClick={handleRowClick}
               >
                 <Column
@@ -352,7 +406,13 @@ const CorrectNamesView = ({ project, classes }: Props) => {
         </div>
         {selectedName != null && (
           <div className={classes.trips}>
-            <Typography variant="h5">Trips</Typography>
+            <Typography variant="h5" className={classes.tripsTitle}>
+              Trips: {selectedName}
+              <div className={classes.spacer} />
+              <IconButton onClick={() => setSelectedName(null)}>
+                <CancelIcon />
+              </IconButton>
+            </Typography>
             <div className={classes.tripsScroller}>
               {printedTrips.map((trip, index) => (
                 <pre key={index}>{trip}</pre>
