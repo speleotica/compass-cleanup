@@ -1113,13 +1113,14 @@
   resolved "https://registry.yarnpkg.com/@sindresorhus/is/-/is-0.7.0.tgz#9a06f4f137ee84d7df0460c1fdb1135ffa6c50fd"
   integrity sha512-ONhaKPIufzzrlNbqtWFFd+jlnemX6lJAgq9ZeiZtS7I1PIf/la7CW4m83rTXRnVnsMbW2k56pGYu7AUFJD9Pow==
 
-"@speleotica/compass@^5.1.0":
-  version "5.1.0"
-  resolved "https://registry.yarnpkg.com/@speleotica/compass/-/compass-5.1.0.tgz#731f2b9c4c469eb103f293f703a6d3dddf9a5ed2"
-  integrity sha512-glC6ueHy8aexhjzWRs4fVU/sppeXETtCtIfy4heVYf4HmMMeB7J86HCa4rhdiD05h/2bTI7KU3awf/kzehGH9A==
+"@speleotica/compass@^5.1.1":
+  version "5.1.1"
+  resolved "https://registry.yarnpkg.com/@speleotica/compass/-/compass-5.1.1.tgz#1c514789e5f1a9f1a74f8e6002fa18c99e93195a"
+  integrity sha512-+HhyIXDbenJmjYIPHeV6Mhi4op+pNovqm2AGAIFV76lx81qTqf5lWUgs04cniNbrcLVTD8HULzpWPefPUtW7Uw==
   dependencies:
     "@babel/runtime" "^7.1.5"
     "@speleotica/unitized" "^2.0.0"
+    iconv-lite "^0.5.0"
     lodash "^4.17.15"
     parse-segment "^1.5.3"
 
@@ -5121,6 +5122,13 @@ iconv-lite@0.4.24, iconv-lite@^0.4.17, iconv-lite@^0.4.24:
   version "0.4.24"
   resolved "https://registry.yarnpkg.com/iconv-lite/-/iconv-lite-0.4.24.tgz#2022b4b25fbddc21d2f524974a474aafe733908b"
   integrity sha512-v3MXnZAcvnywkTUEZomIActle7RXXeedOR31wwl7VlyoXO4Qi9arvSenNQWne1TcRwhCL1HwLI21bEqdpj8/rA==
+  dependencies:
+    safer-buffer ">= 2.1.2 < 3"
+
+iconv-lite@^0.5.0:
+  version "0.5.0"
+  resolved "https://registry.yarnpkg.com/iconv-lite/-/iconv-lite-0.5.0.tgz#59cdde0a2a297cc2aeb0c6445a195ee89f127550"
+  integrity sha512-NnEhI9hIEKHOzJ4f697DMz9IQEXr/MMJ5w64vN2/4Ai+wRnvV7SBrL0KLoRlwaKVghOc7LQ5YkPLuX146b6Ydw==
   dependencies:
     safer-buffer ">= 2.1.2 < 3"
 

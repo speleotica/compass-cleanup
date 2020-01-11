@@ -7,7 +7,8 @@ import {
   InputAdornment,
   Button,
   Typography,
-  IconButton
+  IconButton,
+  Checkbox
 } from '@material-ui/core'
 import buildNameCorrectionStats, {
   NameCorrectionStats,
@@ -113,7 +114,7 @@ const styles = (theme: Theme) =>
     },
     selectedRow: {
       color: 'white',
-      backgroundColor: theme.palette.primary.main,
+      backgroundColor: theme.palette.primary.light,
       outline: 'none'
     },
     replacementInput: {
@@ -161,7 +162,7 @@ const CorrectNamesView = ({ project, classes }: Props) => {
     if (!project) return new Map()
     return buildNameCorrectionStats(project.data)
   }, [project])
-  const [replacements, _setReplacements] = useViewState<iMap<string, string>>('replacements', () =>
+  const [replacements, setReplacements] = useViewState<iMap<string, string>>('replacements', () =>
     iMap<string, string>(
       Array.from(nameCorrectionStats.values()).map(({ original, suggested }) => [
         original,
@@ -169,12 +170,9 @@ const CorrectNamesView = ({ project, classes }: Props) => {
       ])
     )
   )
-  const replacementsRef = React.useRef<iMap<string, string>>(replacements)
-  replacementsRef.current = replacements
-  const setReplacements = React.useCallback(
-    (newReplacements: Record<string, string>) =>
-      _setReplacements(replacementsRef.current.merge(newReplacements)),
-    [_setReplacements]
+  const [enabledReplacements, setEnabledReplacements] = useViewState<iMap<string, boolean>>(
+    'enabledReplacements',
+    () => replacements.map(Boolean)
   )
 
   const allRows = React.useMemo<NameCorrectionStat[]>(
@@ -231,6 +229,33 @@ const CorrectNamesView = ({ project, classes }: Props) => {
       }),
     [selectedName]
   )
+  const enabledHeaderRenderer = React.useCallback(
+    (): React.ReactNode => (
+      <Checkbox
+        checked={enabledReplacements.find(enabled => enabled === true) || false}
+        color="primary"
+        onChange={event => {
+          setEnabledReplacements(event.target.checked ? replacements.map(Boolean) : iMap())
+        }}
+      />
+    ),
+    [replacements, enabledReplacements, setEnabledReplacements]
+  )
+  const enabledRenderer = React.useCallback(
+    ({ cellData }: TableCellProps): React.ReactNode => (
+      <Checkbox
+        checked={enabledReplacements.get(cellData) || false}
+        color="primary"
+        onClick={event => {
+          event.stopPropagation()
+        }}
+        onChange={event => {
+          setEnabledReplacements(enabledReplacements.set(cellData, event.target.checked))
+        }}
+      />
+    ),
+    [enabledReplacements, setEnabledReplacements]
+  )
   const countGetter = React.useCallback(
     ({ rowData, dataKey }: TableCellDataGetterParams): any => {
       const stats = nameCorrectionStats.get(rowData[dataKey])
@@ -251,7 +276,8 @@ const CorrectNamesView = ({ project, classes }: Props) => {
                 <IconButton
                   onClick={event => {
                     event.stopPropagation()
-                    setReplacements({ [cellData]: '' })
+                    setReplacements(replacements.set(cellData, ''))
+                    setEnabledReplacements(enabledReplacements.set(cellData, false))
                   }}
                 >
                   <CancelIcon />
@@ -266,12 +292,18 @@ const CorrectNamesView = ({ project, classes }: Props) => {
           onClick={event => {
             event.stopPropagation()
           }}
-          onChange={event => setReplacements({ [cellData]: event.target.value })}
+          onChange={event => {
+            setReplacements(replacements.set(cellData, event.target.value))
+            const enabled = Boolean(event.target.value)
+            if (enabledReplacements.get(cellData) !== enabled) {
+              setEnabledReplacements(enabledReplacements.set(cellData, enabled))
+            }
+          }}
           fullWidth={true}
         />
       )
     },
-    [replacements, classes]
+    [replacements, setReplacements, enabledReplacements, setEnabledReplacements, classes]
   )
   const replacementCountGetter = React.useCallback(
     ({ rowData, dataKey }: TableCellDataGetterParams): any => {
@@ -310,8 +342,14 @@ const CorrectNamesView = ({ project, classes }: Props) => {
 
   const handleApply = React.useCallback(() => {
     if (!makFile) return
-    withProgress(task => replaceNamesForMakFile(makFile, replacements, task))
-  }, [withProgress, replacements])
+    withProgress(task =>
+      replaceNamesForMakFile(
+        makFile,
+        replacements.filter((value, key) => value && enabledReplacements.get(key)),
+        task
+      )
+    )
+  }, [withProgress, replacements, enabledReplacements])
 
   return (
     <div className={classes.root}>
@@ -369,6 +407,13 @@ const CorrectNamesView = ({ project, classes }: Props) => {
                 onScroll={handleScroll}
                 onRowClick={handleRowClick}
               >
+                <Column
+                  label=""
+                  dataKey="original"
+                  width={50}
+                  headerRenderer={enabledHeaderRenderer}
+                  cellRenderer={enabledRenderer}
+                />
                 <Column
                   label="Original Name"
                   dataKey="original"

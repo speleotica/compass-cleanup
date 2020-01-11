@@ -1,31 +1,24 @@
 import { Map as iMap } from 'immutable'
-import { Task } from './Task'
 
-export default async function* replaceNamesInDatFile(
-  lines: AsyncIterable<string>,
+export default function replaceNamesInDatFile(
+  data: string,
   replacements: iMap<string, string>
-): AsyncIterable<string> {
-    let onSurveyTeam = false
-    for await (const line of lines) {
-        if (onSurveyTeam) {
-          onSurveyTeam = false
-          const parts = line.trim().split(/\s*[,;]\s*/g)
-          let anyReplaced = false
-          let anyPartHasComma = false
-          for (let i = 0; i < parts.length; i++) {
-            const replacement = replacements.get(parts[i])
-            if (replacement) {
-              anyReplaced = true
-              parts[i] = replacement
-          }
-            anyPartHasComma = /,/.test(parts[i])
+): string {
+  return data.replace(
+    /^(SURVEY TEAM:[^\r\n]*(?:\r\n?|\n))([^\r\n]+)/gm,
+    (original, header, team) => {
+      const parts = team.trim().split(/\s*[,;]\s*/g)
+      let anyReplaced = false
+      let anyPartHasComma = false
+      for (let i = 0; i < parts.length; i++) {
+        const replacement = replacements.get(parts[i])
+        if (replacement) {
+          anyReplaced = true
+          parts[i] = replacement
         }
-          yield anyReplaced ? parts.join(anyPartHasComma ? '; ' : ', ') : line
-      } else {
-          if (/^SURVEY TEAM:/i.test(line)) {
-            onSurveyTeam = true
-        }
-          yield line
+        anyPartHasComma = /,/.test(parts[i])
       }
+      return anyReplaced ? header + parts.join(anyPartHasComma ? '; ' : ', ') : original
     }
+  )
 }

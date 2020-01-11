@@ -4,52 +4,42 @@ import { Map as iMap } from 'immutable'
 import * as fs from 'fs-extra'
 import * as path from 'path'
 import replaceNamesInDatFile from './replaceNamesInDatFile'
-import linesOf from './linesOf'
 import { Task } from './Task'
+import * as iconv from 'iconv-lite'
 
 export default async function replaceNamesForMakFile(
   makFile: string,
   replacements: iMap<string, string>,
   task: Task
 ): Promise<void> {
-    const project = await parseCompassMakFile(makFile)
-    let completed = 0,
-        total = 0
-    for (const directive of project.directives) {
-        if (directive.type === CompassMakDirectiveType.DatFile) {
-          const datFile = path.resolve(path.dirname(makFile), directive.file)
-          total += (await fs.stat(datFile)).size
-      }
+  const project = await parseCompassMakFile(makFile)
+  let completed = 0,
+    total = 0
+  for (const directive of project.directives) {
+    if (directive.type === CompassMakDirectiveType.DatFile) {
+      const datFile = path.resolve(path.dirname(makFile), directive.file)
+      total += (await fs.stat(datFile)).size
     }
+  }
 
-    async function* readLines(file: string, encoding: string): AsyncIterable<string> {
-        for await (const line of linesOf(file, encoding)) {
-          if (task.canceled) throw new Error('canceled')
-          yield line
-          completed += line.length + 2 // add 2 for \r\n
-          task.onProgress({ completed, total })
-      }
+  for (const directive of project.directives) {
+    if (directive.type === CompassMakDirectiveType.DatFile) {
+      if (task.canceled) throw new Error('canceled')
+      const datFile = path.resolve(path.dirname(makFile), directive.file)
+      task.onProgress({ message: `Writing ${datFile}`, completed, total })
+      const original = iconv.decode(await fs.readFile(datFile), 'win1252')
+      const transformed = replaceNamesInDatFile(original, replacements)
+      await fs.writeFile(datFile + '.tmp', iconv.encode(transformed, 'win1252'))
+      completed += (await fs.stat(datFile)).size
     }
+  }
 
-    for (const directive of project.directives) {
-        if (directive.type === CompassMakDirectiveType.DatFile) {
-          const datFile = path.resolve(path.dirname(makFile), directive.file)
-          task.onProgress({ message: `Writing ${datFile}`, completed, total })
-          const outStream = fs.createWriteStream(datFile + '.tmp', 'ASCII')
-          for await (const line of replaceNamesInDatFile(readLines(datFile, 'ASCII'), replacements)) {
-            outStream.write(line)
-            outStream.write('\r\n')
-        }
-          outStream.end()
-      }
+  if (task.canceled) throw new Error('canceled')
+
+  for (const directive of project.directives) {
+    if (directive.type === CompassMakDirectiveType.DatFile) {
+      const datFile = path.resolve(path.dirname(makFile), directive.file)
+      await fs.move(datFile + '.tmp', datFile, { overwrite: true })
     }
-
-    if (task.canceled) throw new Error('canceled')
-
-    for (const directive of project.directives) {
-        if (directive.type === CompassMakDirectiveType.DatFile) {
-          const datFile = path.resolve(path.dirname(makFile), directive.file)
-          await fs.move(datFile + '.tmp', datFile, { overwrite: true })
-      }
-    }
+  }
 }
